@@ -1,16 +1,13 @@
 name: Deploy Next.js to Droplet
-
 on:
   push:
     branches: [ main ]
-
 jobs:
   deploy:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-
       - name: Rsync project to server (no node_modules/.git)
         uses: burnett01/rsync-deployments@7.0.1
         with:
@@ -20,7 +17,6 @@ jobs:
           remote_host: ${{ secrets.SSH_HOST }}
           remote_user: ${{ secrets.SSH_USER }}
           remote_key: ${{ secrets.SSH_KEY }}
-
       - name: Install deps, build, restart service
         uses: appleboy/ssh-action@v1.2.0
         with:
@@ -30,9 +26,6 @@ jobs:
           script: |
             set -e
             cd /var/www/ryaneavey-website
-            if [ -f package.json ]; then
-              npm ci || npm install
-              npm run build
-            fi
+            npm ci || npm install
+            npm run build
             sudo systemctl restart ryaneavey-website || sudo systemctl start ryaneavey-website
-            sudo systemctl status --no-pager ryaneavey-website
