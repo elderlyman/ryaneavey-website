@@ -1,31 +1,51 @@
 name: Deploy Next.js to Droplet
+
 on:
   push:
-    branches: [ main ]
+    branches: [main]
+
 jobs:
   deploy:
     runs-on: ubuntu-latest
+    env:
+      SSH_HOST: ${{ secrets.SSH_HOST }}
+      SSH_USER: ${{ secrets.SSH_USER }}
+      SSH_KEY: ${{ secrets.SSH_KEY }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-      - name: Rsync project to server (no node_modules/.git)
+
+      - name: Use Node 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Install deps & build (standalone)
+        run: |
+          npm ci
+          npm run build
+
+      # Ship only what's needed to run standalone
+      - name: Rsync build to server
         uses: burnett01/rsync-deployments@7.0.1
         with:
-          switches: -az --delete --exclude=".git" --exclude=".github" --exclude="node_modules"
-          path: ./
+          switches: -az --delete
+          # include .next/standalone + .next/static + public + any app assets
+          path: |
+            .next/standalone/
+            .next/static/
+            public/
           remote_path: /var/www/ryaneavey-website
-          remote_host: ${{ secrets.SSH_HOST }}
-          remote_user: ${{ secrets.SSH_USER }}
-          remote_key: ${{ secrets.SSH_KEY }}
-      - name: Install deps, build, restart service
+          remote_host: ${{ env.SSH_HOST }}
+          remote_user: ${{ env.SSH_USER }}
+          remote_key: ${{ env.SSH_KEY }}
+
+      - name: Restart service
         uses: appleboy/ssh-action@v1.2.0
         with:
-          host: ${{ secrets.SSH_HOST }}
-          username: ${{ secrets.SSH_USER }}
-          key: ${{ secrets.SSH_KEY }}
+          host: ${{ env.SSH_HOST }}
+          username: ${{ env.SSH_USER }}
+          key: ${{ env.SSH_KEY }}
           script: |
-            set -e
-            cd /var/www/ryaneavey-website
-            npm ci || npm install
-            npm run build
             sudo systemctl restart ryaneavey-website || sudo systemctl start ryaneavey-website
+            sudo systemctl status --no-pager ryaneavey-website
