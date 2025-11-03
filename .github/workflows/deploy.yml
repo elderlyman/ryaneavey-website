@@ -11,6 +11,7 @@ jobs:
       SSH_HOST: ${{ secrets.SSH_HOST }}
       SSH_USER: ${{ secrets.SSH_USER }}
       SSH_KEY: ${{ secrets.SSH_KEY }}
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -25,17 +26,24 @@ jobs:
           npm ci
           npm run build
 
-      # Ship only what's needed to run standalone
-      - name: Rsync build to server
+      - name: Assemble deploy bundle
+        run: |
+          rm -rf deploy
+          mkdir -p deploy
+          # copy standalone runtime
+          cp -R .next/standalone/* deploy/
+          # ensure .next/static is at expected relative path
+          mkdir -p deploy/.next
+          cp -R .next/static deploy/.next/
+          # public assets (if any)
+          if [ -d public ]; then cp -R public deploy/public; fi
+
+      - name: Rsync deploy/ to server
         uses: burnett01/rsync-deployments@7.0.1
         with:
           switches: -az --delete
-          # include .next/standalone + .next/static + public + any app assets
-          path: |
-            .next/standalone/
-            .next/static/
-            public/
-          remote_path: /var/www/ryaneavey-website
+          path: deploy/
+          remote_path: /var/www/ryaneavey-website/
           remote_host: ${{ env.SSH_HOST }}
           remote_user: ${{ env.SSH_USER }}
           remote_key: ${{ env.SSH_KEY }}
@@ -47,5 +55,6 @@ jobs:
           username: ${{ env.SSH_USER }}
           key: ${{ env.SSH_KEY }}
           script: |
+            sudo systemctl daemon-reload
             sudo systemctl restart ryaneavey-website || sudo systemctl start ryaneavey-website
-            sudo systemctl status --no-pager ryaneavey-website
+            sudo systemctl status --no-pager ryaneavey-website || true
